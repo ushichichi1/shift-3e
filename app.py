@@ -762,12 +762,13 @@ def _generate_template_excel(year, month, num_staff=20):
         cell.alignment = Alignment(horizontal="center")
     ws_s.cell(row=1, column=1, value="勤務表設定").font = Font(bold=True, size=14)
     # データ
+    _body_font = Font(color="000000", size=10)
     for i, (label, default, desc) in enumerate(SETTINGS_DEF):
         r = 4 + i
-        ws_s.cell(row=r, column=1, value=label).border = bdr
-        ws_s.cell(row=r, column=2, value=default).border = bdr
-        ws_s.cell(row=r, column=3, value=desc).border = bdr
-        ws_s.cell(row=r, column=3).font = Font(color="888888", size=9)
+        c1 = ws_s.cell(row=r, column=1, value=label); c1.border = bdr; c1.font = _body_font
+        c2 = ws_s.cell(row=r, column=2, value=default); c2.border = bdr; c2.font = _body_font
+        c3 = ws_s.cell(row=r, column=3, value=desc); c3.border = bdr
+        c3.font = Font(color="888888", size=9)
 
     # コンプライアンス・運用条件（参考情報 — アプリ側のサイドバーで設定）
     comp_start = 4 + len(SETTINGS_DEF) + 2
@@ -797,11 +798,11 @@ def _generate_template_excel(year, month, num_staff=20):
         cell.alignment = Alignment(horizontal="center")
     for i, (label, default, desc) in enumerate(comp_items):
         r = comp_start + 3 + i
-        ws_s.cell(row=r, column=1, value=label).border = bdr
-        ws_s.cell(row=r, column=2, value=default).border = bdr
-        ws_s.cell(row=r, column=2).font = Font(color="666666")
-        ws_s.cell(row=r, column=3, value=desc).border = bdr
-        ws_s.cell(row=r, column=3).font = Font(color="888888", size=9)
+        c1 = ws_s.cell(row=r, column=1, value=label); c1.border = bdr; c1.font = _body_font
+        c2 = ws_s.cell(row=r, column=2, value=default); c2.border = bdr
+        c2.font = Font(color="666666")
+        c3 = ws_s.cell(row=r, column=3, value=desc); c3.border = bdr
+        c3.font = Font(color="888888", size=9)
 
     # === 勤務種別設定セクション ===
     shift_type_start = comp_start + 3 + len(comp_items) + 2
@@ -833,13 +834,13 @@ def _generate_template_excel(year, month, num_staff=20):
     ]
     for i, (sym, name, hours, use) in enumerate(_shift_type_rows):
         r = shift_type_start + 3 + i
-        ws_s.cell(row=r, column=1, value=sym).border = bdr
-        ws_s.cell(row=r, column=1).font = Font(bold=True)
-        ws_s.cell(row=r, column=2, value=name).border = bdr
-        ws_s.cell(row=r, column=3, value=hours).border = bdr
-        ws_s.cell(row=r, column=3).font = Font(color="888888", size=9)
-        ws_s.cell(row=r, column=4, value=use).border = bdr
-        ws_s.cell(row=r, column=4).alignment = Alignment(horizontal="center")
+        c1 = ws_s.cell(row=r, column=1, value=sym); c1.border = bdr
+        c1.font = Font(bold=True, color="000000")
+        c2 = ws_s.cell(row=r, column=2, value=name); c2.border = bdr; c2.font = _body_font
+        c3 = ws_s.cell(row=r, column=3, value=hours); c3.border = bdr
+        c3.font = Font(color="888888", size=9)
+        c4 = ws_s.cell(row=r, column=4, value=use); c4.border = bdr; c4.font = _body_font
+        c4.alignment = Alignment(horizontal="center")
 
     # === 共通データ ===
     # 3E スタッフ情報カラム (13列)

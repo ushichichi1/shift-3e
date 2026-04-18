@@ -6,7 +6,7 @@ Excel / Google Sheets 両対応
 import streamlit as st
 import pandas as pd
 import calendar
-from datetime import date
+from datetime import date, datetime
 from io import BytesIO
 
 import jpholiday
@@ -1814,7 +1814,7 @@ with tab3:
                 wb.remove(wb.active)
                 for res in results:
                     pat = res.get("pattern_num", 1)
-                    title = f"パターン{pat}" if len(results) > 1 else "勤務表"
+                    title = f"3E_パターン{pat}" if len(results) > 1 else "3E勤務表"
                     _write_one_sheet(wb, res, title)
                 wb.save(buf)
                 buf.seek(0)
@@ -1866,7 +1866,7 @@ with tab4:
             _dl_top1.download_button(
                 label="📥 Excel出力",
                 data=st.session_state.excel_bytes,
-                file_name=f"勤務表_{r_year}_{r_month:02d}.xlsx",
+                file_name=f"3E勤務表_{r_year}_{r_month:02d}_{datetime.now().strftime('%Y%m%d-%H%M')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary",
                 use_container_width=True,
@@ -1880,7 +1880,7 @@ with tab4:
             _wb.remove(_wb.active)
             for _res in results:
                 _pat = _res.get("pattern_num", 1)
-                _title = f"パターン{_pat}" if len(results) > 1 else "勤務表"
+                _title = f"3E_パターン{_pat}" if len(results) > 1 else "3E勤務表"
                 _write_one_sheet(_wb, _res, _title)
             _wb.save(_buf)
             _buf.seek(0)
@@ -1893,7 +1893,7 @@ with tab4:
                 from shift_scheduler import _get_gc as _get_gsheet_client, _write_gsheet_one
                 with st.spinner("Googleスプレッドシートに出力中..."):
                     gc = _get_gsheet_client()
-                    title = f"勤務表_{r_year}_{r_month:02d}"
+                    title = f"3E勤務表_{r_year}_{r_month:02d}_{datetime.now().strftime('%Y%m%d-%H%M')}"
                     sh = gc.create(title)
                     # デフォルトSheet1を削除
                     try:
@@ -2245,7 +2245,7 @@ with tab4:
             dl_col1.download_button(
                 label="📥 勤務表 Excelダウンロード",
                 data=st.session_state.excel_bytes,
-                file_name=f"勤務表_{r_year}_{r_month:02d}.xlsx",
+                file_name=f"3E勤務表_{r_year}_{r_month:02d}_{datetime.now().strftime('%Y%m%d-%H%M')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary",
                 use_container_width=True,

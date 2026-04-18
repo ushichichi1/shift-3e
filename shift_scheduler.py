@@ -1693,8 +1693,10 @@ def _write_one_sheet(wb, result, sheet_title):
     wdj = ["月", "火", "水", "木", "金", "土", "日"]
     fwd = date(year, month, 1).weekday()
 
+    from datetime import datetime as _dt
+    _gen_at = _dt.now().strftime("%Y-%m-%d %H:%M")
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=8)
-    ws.cell(row=1, column=1, value=f"{year}年{month}月 勤務表").font = FONT_T
+    ws.cell(row=1, column=1, value=f"【3E】{year}年{month}月 勤務表  (出力: {_gen_at})").font = FONT_T
 
     RD, RW, RS = 3, 4, 5
     for r in (RD, RW):

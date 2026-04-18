@@ -1259,11 +1259,15 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
     ld_sn_pen = {}
     ld_consec_pen = {}
 
+    # 3E: 研修(R)は使用しない（ICU由来シフト種別 / 希望記号としても無視）
+    for s in names:
+        for d in days:
+            prob += x[s, d, R] == 0
+
     for s in parttime:
         for d in days:
             prob += x[s, d, N] == 0
             prob += x[s, d, SN] == 0   # パートは短夜勤も不可
-            prob += x[s, d, R] == 0    # パートは研修なし
         target = round(weekly[s] * num_days / 7)
         # 休暇日数を差し引く
         vac_count = len(vacation_days.get(s, set()))

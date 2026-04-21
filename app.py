@@ -1221,9 +1221,11 @@ min_ward_wd = col1a.number_input("病棟", 1, 20, 4, key="inp_min_ward_wd")
 min_hcu_wd  = col1b.number_input("HCU", 1, 20, 2, key="inp_min_hcu_wd")
 min_er_wd   = col1c.number_input("ER", 1, 20, 3, key="inp_min_er_wd")
 st.sidebar.caption("休日（土日祝）")
-col2a, col2b = st.sidebar.columns(2)
+col2a, col2b, col2c = st.sidebar.columns(3)
 min_ward_hd = col2a.number_input("病棟（休日）", 1, 20, 4, key="inp_min_ward_hd")
 min_hcu_hd  = col2b.number_input("HCU（休日）", 1, 20, 2, key="inp_min_hcu_hd")
+max_day_hd  = col2c.number_input("日勤上限", 4, 20, 8, key="inp_max_day_hd",
+                                   help="土日祝の日勤系合計上限（超過分は公休へ）")
 st.sidebar.info("🌙 夜勤: 病棟2+HCU1+リーダー1=4名固定")
 
 st.sidebar.markdown("---")
@@ -1265,6 +1267,7 @@ settings = {
     "public_off_override": po_override,
     "min_ward_wd": min_ward_wd, "min_hcu_wd": min_hcu_wd, "min_er_wd": min_er_wd,
     "min_ward_hd": min_ward_hd, "min_hcu_hd": min_hcu_hd,
+    "max_day_staff_hd": max_day_hd,
     "max_night": max_n_reg, "pref_night": pref_n_reg,
     "max_consecutive": max_consec, "pref_consecutive": pref_consec,
     "solver_time_limit": time_limit, "holidays": "",

@@ -1566,19 +1566,31 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
     # P6 夜勤分散                6
     # P7 推奨連勤超過            3
     # P8 公休均等                8
+    # スラック変数をリスト化（dict.values のビューが原因と思われるlpSum不成立を回避）
+    _wd_short_list = [wd_total_short[k] for k in wd_total_short]
+    _hd_short_list = [hd_total_short[k] for k in hd_total_short]
+    _hd_over_list  = [hd_total_over[k]  for k in hd_total_over]
+    _wd_over_list  = [wd_total_over[k]  for k in wd_total_over]
+    _erl_short_list  = [erl_short[k]    for k in erl_short]
+    _lead_short_list = [lead_short_v[k] for k in lead_short_v]
+    _late_short_list = [late_short_v[k] for k in late_short_v]
+    print(f"  診断: slack vars = wd_short:{len(_wd_short_list)} hd_short:{len(_hd_short_list)} "
+          f"hd_over:{len(_hd_over_list)} wd_over:{len(_wd_over_list)} "
+          f"erl:{len(_erl_short_list)} lead:{len(_lead_short_list)} late:{len(_late_short_list)}")
+
     obj = (
         300 * pulp.lpSum(a_miss[d] for d in days)
         + 250 * pulp.lpSum(req_miss[k] for k in req_miss)
         + 200 * pulp.lpSum(unit_short_vars)
         # ── 必須制約ソフト化ペナルティ（違反ゼロが理想） ──
-        + 2000 * pulp.lpSum(wd_total_short.values())
-        + 2000 * pulp.lpSum(hd_total_short.values())
-        + 2000 * pulp.lpSum(hd_total_over.values())
-        + 2000 * pulp.lpSum(erl_short.values())
-        + 2000 * pulp.lpSum(lead_short_v.values())
-        + 2000 * pulp.lpSum(late_short_v.values())
+        + 2000 * pulp.lpSum(_wd_short_list)
+        + 2000 * pulp.lpSum(_hd_short_list)
+        + 2000 * pulp.lpSum(_hd_over_list)
+        + 2000 * pulp.lpSum(_erl_short_list)
+        + 2000 * pulp.lpSum(_lead_short_list)
+        + 2000 * pulp.lpSum(_late_short_list)
         # ── 平日上限/平準化 ──
-        + 150 * pulp.lpSum(wd_total_over.values())
+        + 150 * pulp.lpSum(_wd_over_list)
         +  25 * pulp.lpSum(night_max_over[s] for s in night_max_over)
         +  60 * (n_max_var - n_min_var)
         +   6 * pulp.lpSum(night_spread[i] for i in night_spread)

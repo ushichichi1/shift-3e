@@ -1121,7 +1121,7 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
         late_sum = pulp.lpSum(x[s, d, L] for s in late_pool) if late_pool else pulp.lpSum([])
         # ソフト: 下限(late_count) 下限割れを診断出力、上限はハード
         if late_pool and late_count > 0:
-            lt_short = pulp.LpVariable(f"late_short_{d}", lowBound=0)
+            lt_short = pulp.LpVariable(f"late_short_{d}", lowBound=0, upBound=late_count, cat=pulp.LpInteger)
             prob += late_sum + lt_short >= late_count
             prob += late_sum <= late_count
             late_short_v[d] = lt_short
@@ -1198,7 +1198,7 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
         lead_sum  = pulp.lpSum(ud[s, d, UNIT_LEAD] for s in names)
 
         # 共通リーダー: 下限ソフト / 上限ハード
-        ld_short = pulp.LpVariable(f"lead_short_{d}", lowBound=0)
+        ld_short = pulp.LpVariable(f"lead_short_{d}", lowBound=0, upBound=max(1, leader_count), cat=pulp.LpInteger)
         prob += lead_sum + ld_short >= leader_count
         prob += lead_sum <= leader_count
         lead_short_v[d] = ld_short
@@ -1219,8 +1219,8 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
 
             # 休日日勤系合計: ソフト化（下限割れ/上限超過を診断出力）
             rest_day_sum = pulp.lpSum(x[s, d, t] for s in names for t in DAY_SHIFTS)
-            short_hd = pulp.LpVariable(f"hd_total_short_{d}", lowBound=0)
-            over_hd  = pulp.LpVariable(f"hd_total_over_{d}",  lowBound=0)
+            short_hd = pulp.LpVariable(f"hd_total_short_{d}", lowBound=0, upBound=min_day_hd, cat=pulp.LpInteger)
+            over_hd  = pulp.LpVariable(f"hd_total_over_{d}",  lowBound=0, upBound=len(names), cat=pulp.LpInteger)
             prob += rest_day_sum + short_hd >= min_day_hd
             prob += rest_day_sum - over_hd  <= max_day_hd
             hd_total_short[d] = short_hd
@@ -1228,8 +1228,8 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
         # 平日日勤系合計: ソフト化
         if not is_rest:
             wd_day_sum = pulp.lpSum(x[s, d, t] for s in names for t in DAY_SHIFTS)
-            short_wd = pulp.LpVariable(f"wd_total_short_{d}", lowBound=0)
-            over_wd  = pulp.LpVariable(f"wd_total_over_{d}",  lowBound=0)
+            short_wd = pulp.LpVariable(f"wd_total_short_{d}", lowBound=0, upBound=min_day_wd, cat=pulp.LpInteger)
+            over_wd  = pulp.LpVariable(f"wd_total_over_{d}",  lowBound=0, upBound=len(names), cat=pulp.LpInteger)
             prob += wd_day_sum + short_wd >= min_day_wd
             prob += wd_day_sum - over_wd  <= max_day_wd
             wd_total_short[d] = short_wd
@@ -1254,7 +1254,7 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
             prob += er_sum >= max(1, min_er_wd - 1)
 
             # ER: ERリーダー必須(>=1) → ソフト化
-            erl_s = pulp.LpVariable(f"erl_short_{d}", lowBound=0)
+            erl_s = pulp.LpVariable(f"erl_short_{d}", lowBound=0, upBound=1, cat=pulp.LpBinary)
             prob += pulp.lpSum(ud[s, d, UNIT_ER] for s in erl_staff) + erl_s >= 1
             erl_short[d] = erl_s
 
@@ -1589,7 +1589,7 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
         obj += 40 * wd_level_gap
     if night_min_miss:
         obj += 40 * pulp.lpSum(night_min_miss[s] for s in night_min_miss)
-    prob += obj
+    prob.setObjective(obj)
 
     # ============================================================
     # 複数パターン生成ループ

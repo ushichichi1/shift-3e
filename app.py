@@ -1973,7 +1973,9 @@ with tab4:
         violations_pre, _, _ = check_nursing_guidelines(
             schedule, names, tiers, r_dedicated, night_hours)
         bad_pairs_pre, _, _ = check_skill_pairing(
-            schedule, names, tiers, r_num_days, r_year, r_month)
+            schedule, names, result.get("classes", {}),
+            result.get("is_leader_map", {}), result.get("is_er_leader_map", {}),
+            r_num_days, r_year, r_month)
         shortfalls_pre, _, _ = check_staffing_ratio(
             schedule, names, r_dedicated, r_weekly,
             r_num_days, bed_count, _ratio_val, r_year, r_month,
@@ -2448,7 +2450,10 @@ with tab5:
 
         # ── KPIカード ──
         _v, _w, _ok = check_nursing_guidelines(_schedule, _names, _tiers, _r_dedicated, night_hours)
-        _bp, _wp, _okp = check_skill_pairing(_schedule, _names, _tiers, _r_num_days, _r_year, _r_month)
+        _bp, _wp, _okp = check_skill_pairing(
+            _schedule, _names, _res.get("classes", {}),
+            _res.get("is_leader_map", {}), _res.get("is_er_leader_map", {}),
+            _r_num_days, _r_year, _r_month)
         _sf, _okd, _req = check_staffing_ratio(
             _schedule, _names, _r_dedicated, _r_weekly,
             _r_num_days, bed_count, _ratio_val, _r_year, _r_month,

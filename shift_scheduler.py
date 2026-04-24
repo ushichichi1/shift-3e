@@ -1583,14 +1583,14 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
         + 250 * pulp.lpSum(req_miss[k] for k in req_miss)
         + 200 * pulp.lpSum(unit_short_vars)
         # ── 必須制約ソフト化ペナルティ（違反ゼロが理想） ──
-        + 2000 * pulp.lpSum(_wd_short_list)
-        + 2000 * pulp.lpSum(_hd_short_list)
-        + 2000 * pulp.lpSum(_hd_over_list)
-        + 2000 * pulp.lpSum(_erl_short_list)
-        + 2000 * pulp.lpSum(_lead_short_list)
-        + 2000 * pulp.lpSum(_late_short_list)
+        + pulp.lpSum(2000 * v for v in _wd_short_list)
+        + pulp.lpSum(2000 * v for v in _hd_short_list)
+        + pulp.lpSum(2000 * v for v in _hd_over_list)
+        + pulp.lpSum(2000 * v for v in _erl_short_list)
+        + pulp.lpSum(2000 * v for v in _lead_short_list)
+        + pulp.lpSum(2000 * v for v in _late_short_list)
         # ── 平日上限/平準化 ──
-        + 150 * pulp.lpSum(_wd_over_list)
+        + pulp.lpSum(150 * v for v in _wd_over_list)
         +  25 * pulp.lpSum(night_max_over[s] for s in night_max_over)
         +  60 * (n_max_var - n_min_var)
         +   6 * pulp.lpSum(night_spread[i] for i in night_spread)
@@ -1602,6 +1602,21 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
     if night_min_miss:
         obj += 40 * pulp.lpSum(night_min_miss[s] for s in night_min_miss)
     prob.setObjective(obj)
+    # ─── 診断: スラックが目的関数に組み込まれているか係数を確認 ───
+    try:
+        _obj_dict = prob.objective
+        if _wd_short_list:
+            _c = _obj_dict.get(_wd_short_list[0], 0)
+            print(f"  診断: obj係数チェック wd_short[0]={_c} (期待値2000)")
+        if _hd_over_list:
+            _c = _obj_dict.get(_hd_over_list[0], 0)
+            print(f"  診断: obj係数チェック hd_over[0]={_c} (期待値2000)")
+        if _lead_short_list:
+            _c = _obj_dict.get(_lead_short_list[0], 0)
+            print(f"  診断: obj係数チェック lead_short[0]={_c} (期待値2000)")
+        print(f"  診断: obj全体の項数={len(_obj_dict)}")
+    except Exception as _e:
+        print(f"  診断: objective検査失敗: {_e}")
 
     # ============================================================
     # 複数パターン生成ループ

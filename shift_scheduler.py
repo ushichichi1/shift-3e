@@ -1557,7 +1557,7 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
     # 目的関数 (3E版)
     # P0 必須制約(診断用)     2000  ← 下限割れ/休日上限超過/ERL/共L/遅出 不足
     # P0 夜勤リーダー欠        300
-    # P1 希望未達              250
+    # P1 希望未達              500  ← 希望尊重を強化（2024-04改）
     # P0 ユニット人数不足      200
     # P2 平日上限超過          150  ← 超過は平準化でなるべく抑制
     # P3 平日月内平準化         40  ← wd_max - wd_min
@@ -1580,7 +1580,7 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
 
     obj = (
         300 * pulp.lpSum(a_miss[d] for d in days)
-        + 250 * pulp.lpSum(req_miss[k] for k in req_miss)
+        + 500 * pulp.lpSum(req_miss[k] for k in req_miss)
         + 200 * pulp.lpSum(unit_short_vars)
         # ── 必須制約ソフト化ペナルティ（違反ゼロが理想） ──
         + pulp.lpSum(2000 * v for v in _wd_short_list)

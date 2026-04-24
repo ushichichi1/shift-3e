@@ -163,22 +163,29 @@ def check_nursing_guidelines(schedule, names, tiers, r_dedicated, night_hours=16
 
     return violations, warnings, ok_list
 
-def check_skill_pairing(schedule, names, tiers, num_days, year, month):
+def check_skill_pairing(schedule, names, classes, is_leader_map, is_er_leader_map,
+                        num_days, year, month):
     """
-    夜勤ペアのスキルバランスをチェックする。
-    NG条件: 夜勤ペアが全員 C（新人のみ）の日がある。
-    推奨: 各夜勤ペアにA/AB以上が1名以上含まれる。
+    夜勤ペアのリーダー配置をチェックする（3E版）。
+    NG条件: 夜勤ペアにリーダー（共L/ERL）が1人もいない日がある。
+    推奨: ERL が含まれていると最も安心。
     Returns:
-        bad_days: list of dict（NG日の情報）
-        warn_days: list of dict（注意日）
-        ok_days: int
+        bad_days: list of dict（リーダー不在の日）
+        warn_days: list of dict（共Lはいるが ERL 不在の日）
+        ok_days: int（ERL 含む夜勤ペアの日数）
     """
-    tier_rank = {TIER_A: 5, TIER_AB: 4, TIER_B: 3, TIER_CP: 2, TIER_C: 1}
     wdj = ["月", "火", "水", "木", "金", "土", "日"]
     fwd = date(year, month, 1).weekday()
     bad_days = []
     warn_days = []
     ok_days = 0
+
+    def _role(s):
+        if is_er_leader_map.get(s):
+            return "ERL"
+        if is_leader_map.get(s):
+            return "共L"
+        return classes.get(s, "?")
 
     for d in range(num_days):
         night_staff = [s for s in names if schedule[s][d] in NIGHT_SHIFTS]
@@ -187,24 +194,19 @@ def check_skill_pairing(schedule, names, tiers, num_days, year, month):
             continue
         wd = wdj[(fwd + d) % 7]
         day_label = f"{d+1}日({wd})"
-        tier_list = [tiers.get(s, TIER_C) for s in night_staff]
-        max_rank = max(tier_rank.get(t, 1) for t in tier_list)
-        members_str = " + ".join(f"{s}({tiers.get(s,'?')})" for s in night_staff)
+        has_erl = any(is_er_leader_map.get(s) for s in night_staff)
+        has_ldr = any(is_leader_map.get(s) for s in night_staff)
+        members_str = " + ".join(f"{s}({_role(s)})" for s in night_staff)
 
-        if max_rank == 1:  # 全員C（新人のみ）
+        if not has_ldr:
             bad_days.append({
                 "日": day_label, "夜勤メンバー": members_str,
-                "問題": "🚨 全員通常C",
+                "問題": "リーダー不在（共L/ERL ともなし）",
             })
-        elif max_rank == 2:  # 最高がC+
-            bad_days.append({
-                "日": day_label, "夜勤メンバー": members_str,
-                "問題": "🚨 最高がC+（A/AB/B不在）",
-            })
-        elif max_rank == 3:  # 最高がB
+        elif not has_erl:
             warn_days.append({
                 "日": day_label, "夜勤メンバー": members_str,
-                "問題": "⚠ A/AB不在（Bが最高）",
+                "問題": "ERL不在（共Lのみ）",
             })
         else:
             ok_days += 1
@@ -2189,32 +2191,35 @@ with tab4:
             if ok_list:
                 st.markdown(f"##### ✅ 全項目適合: {', '.join(ok_list)}")
 
-        # ── スキルペアチェック ───────────────────────────────
+        # ── 夜勤リーダー配置チェック ─────────────────────────
+        _ldr_map_pair = result.get("is_leader_map", {})
+        _erl_map_pair = result.get("is_er_leader_map", {})
+        _classes_pair = result.get("classes", {})
         bad_pairs, warn_pairs, ok_pair_days = check_skill_pairing(
-            schedule, names, tiers, r_num_days, r_year, r_month)
-        pair_label = ("✅ 全日適正" if not bad_pairs and not warn_pairs
-                      else f"🚨 NG {len(bad_pairs)}日" if bad_pairs
-                      else f"⚠ 注意 {len(warn_pairs)}日")
-        with st.expander(f"👥 夜勤スキルペアチェック — {pair_label}",
+            schedule, names, _classes_pair, _ldr_map_pair, _erl_map_pair,
+            r_num_days, r_year, r_month)
+        pair_label = ("全日適正" if not bad_pairs and not warn_pairs
+                      else f"NG {len(bad_pairs)}日" if bad_pairs
+                      else f"注意 {len(warn_pairs)}日")
+        with st.expander(f"夜勤リーダー配置チェック — {pair_label}",
                          expanded=bool(bad_pairs)):
-            st.caption("A/AB（ベテラン）が各夜勤ペアに1名以上含まれるかチェックします。")
+            st.caption("各夜勤ペアに共リーダー（共L）または ERリーダー（ERL）が含まれるかチェックします。")
             sp1, sp2, sp3 = st.columns(3)
-            sp1.metric("🚨 全員新人（C）日", f"{len(bad_pairs)}日",
+            sp1.metric("リーダー不在日", f"{len(bad_pairs)}日",
                        delta="要対応" if bad_pairs else None, delta_color="inverse")
-            sp2.metric("⚠ A/AB不在日", f"{len(warn_pairs)}日")
-            sp3.metric("✅ 適正ペア日", f"{ok_pair_days}日")
+            sp2.metric("ERL不在日（共Lのみ）", f"{len(warn_pairs)}日")
+            sp3.metric("ERL含む日", f"{ok_pair_days}日")
 
-            tier_legend = "Tier: **A**=エキスパート / **AB**=上級 / **B**=中堅 / **C**=新人"
-            st.caption(tier_legend)
+            st.caption("凡例: **ERL**=ERリーダー可 / **共L**=リーダー可 / それ以外はクラス表示")
 
             if bad_days := bad_pairs:
-                st.markdown("##### 🚨 問題あり（新人のみ夜勤）")
+                st.markdown("##### リーダー不在の夜勤")
                 st.dataframe(pd.DataFrame(bad_days), use_container_width=True, hide_index=True)
             if warn_days := warn_pairs:
-                st.markdown("##### ⚠ 注意（A/AB不在）")
+                st.markdown("##### ERL不在（共Lのみ）の夜勤")
                 st.dataframe(pd.DataFrame(warn_days), use_container_width=True, hide_index=True)
             if not bad_pairs and not warn_pairs:
-                st.success("全夜勤ペアにA/AB（ベテラン）が含まれています。")
+                st.success("全夜勤ペアに ERリーダー（ERL）が含まれています。")
 
         # ── 人員配置基準チェック ─────────────────────────────
         shortfalls, ok_days, req_nurses = check_staffing_ratio(

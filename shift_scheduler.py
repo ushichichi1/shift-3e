@@ -2103,6 +2103,51 @@ def _write_one_sheet(wb, result, sheet_title):
                 cell.fill = _PF(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
         row += 1
 
+    # ────────────────────────────────────────────────────
+    # 希望未達セクション (shift-cf 連携用)
+    # 仕様書 v1.1 docs/xlsx-bridge-spec.md
+    # ────────────────────────────────────────────────────
+    row += 1
+    ws.cell(row=row, column=1, value="⚠ このパターンの希望未達").font = Font(bold=True, color="C00000")
+    row += 1
+    ws.cell(row=row, column=1, value="日付").font = FONT_H
+    ws.cell(row=row, column=1).border = BDR
+    ws.cell(row=row, column=2, value="スタッフ").font = FONT_H
+    ws.cell(row=row, column=2).border = BDR
+    ws.cell(row=row, column=3, value="希望").font = FONT_H
+    ws.cell(row=row, column=3).border = BDR
+    ws.cell(row=row, column=4, value="結果").font = FONT_H
+    ws.cell(row=row, column=4).border = BDR
+    ws.cell(row=row, column=5, value="由来").font = FONT_H
+    ws.cell(row=row, column=5).border = BDR
+    row += 1
+
+    # missed: {name: [day_nums (1-indexed)]}
+    has_any = False
+    for s in names:
+        if s not in missed:
+            continue
+        days_list = sorted(missed[s])
+        rd = requests.get(s, {})
+        for day_num in days_list:
+            wanted = rd.get(day_num, "")
+            actual = schedule[s][day_num - 1] if day_num - 1 < len(schedule[s]) else ""
+            ws.cell(row=row, column=1, value=day_num)
+            ws.cell(row=row, column=2, value=s)
+            ws.cell(row=row, column=3, value=wanted)
+            ws.cell(row=row, column=4, value=actual)
+            # 由来: 現状 source 区別なし (Phase 1.5 で shift-cf 側 source カラム
+            # 連携時に対応予定)。当面は「スタッフ」固定。
+            ws.cell(row=row, column=5, value="スタッフ")
+            for c in range(1, 6):
+                ws.cell(row=row, column=c).alignment = CTR
+                ws.cell(row=row, column=c).border = BDR
+            row += 1
+            has_any = True
+    if not has_any:
+        ws.cell(row=row, column=1, value="✅ 未達なし").font = Font(color="008000")
+        row += 1
+
     ws.column_dimensions["A"].width = 8
     ws.column_dimensions["B"].width = 5
     for d in range(num_days):

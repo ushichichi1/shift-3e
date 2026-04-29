@@ -2134,7 +2134,20 @@ with tab4:
                     sname = row["名前"]
                     new_schedule[sname] = [row[dc] for dc in day_cols]
                 st.session_state.results[pat_idx]["schedule"] = new_schedule
-                st.success("✅ 変更を保存しました。ページを再読み込みすると反映されます。")
+                # excel_bytes も再生成して Excel出力ボタンに反映
+                from openpyxl import Workbook as _WB2
+                _buf2 = BytesIO()
+                _wb2 = _WB2()
+                _wb2.remove(_wb2.active)
+                for _res2 in st.session_state.results:
+                    _pat2 = _res2.get("pattern_num", 1)
+                    _title2 = f"3E_パターン{_pat2}" if len(st.session_state.results) > 1 else "3E勤務表"
+                    _write_one_sheet(_wb2, _res2, _title2)
+                    _write_source_sheet(_wb2, _res2, f"{_title2}_ソース")
+                _wb2.save(_buf2)
+                _buf2.seek(0)
+                st.session_state.excel_bytes = _buf2.getvalue()
+                st.success("✅ 変更を保存しました。Excel出力ボタンから最新版をダウンロードできます。")
                 st.rerun()
 
         # ── 夜勤回数分布チャート ─────────────────────────────

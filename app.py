@@ -2061,11 +2061,42 @@ with tab4:
         shift_text_colors = {N: "#FFFFFF", SN: "#FFFFFF"}
 
         day_cols = [f"{d+1}" for d in range(r_num_days)]
+
+        # 希望由来セルの判定マップを構築
+        _reqs_for_style = result.get("requests", {})
+        _missed_for_style = result.get("missed_requests", {})
+        _rsrc_for_style = result.get("requests_source", {})
+        # honored_map: {(staff_name, day_num): 'user'|'admin'}
+        # missed_map:  {(staff_name, day_num): True}
+        honored_map = {}
+        missed_map = {}
+        for s in names:
+            rd = _reqs_for_style.get(s, {})
+            md = set(_missed_for_style.get(s, []))
+            rs = _rsrc_for_style.get(s, {})
+            for d_num in rd:
+                if d_num in md:
+                    missed_map[(s, d_num)] = True
+                else:
+                    honored_map[(s, d_num)] = rs.get(d_num, 'user')
+
         table_data = []
         for s in names:
             row = {"名前": s, "Tier": tiers[s]}
             for d in range(r_num_days):
-                row[day_cols[d]] = schedule[s][d]
+                val = schedule[s][d]
+                d_num = d + 1
+                # 希望由来マーカーをセルテキストに付与
+                key = (s, d_num)
+                if key in honored_map:
+                    src = honored_map[key]
+                    if src == 'admin':
+                        val = f"◆{val}"   # 青◆ = 管理者上書き反映
+                    else:
+                        val = f"●{val}"   # 赤● = スタッフ希望反映
+                elif key in missed_map:
+                    val = f"△{val}"       # △ = 希望未達
+                row[day_cols[d]] = val
             counts = {t: schedule[s].count(t) for t in SHIFTS}
             row["日"] = counts[D]
             row["夜"] = counts[N]
@@ -2085,56 +2116,43 @@ with tab4:
 
         df = pd.DataFrame(table_data)
 
-        # 希望由来セルの判定マップを構築
-        _reqs_for_style = result.get("requests", {})
-        _missed_for_style = result.get("missed_requests", {})
-        _rsrc_for_style = result.get("requests_source", {})
-        # honored_cells: {(row_idx, col_name): 'user'|'admin'}
-        # missed_cells: {(row_idx, col_name): True}
-        honored_cells = {}
-        missed_cells = {}
-        for row_idx, s in enumerate(names):
-            rd = _reqs_for_style.get(s, {})
-            md = set(_missed_for_style.get(s, []))
-            rs = _rsrc_for_style.get(s, {})
-            for d_num in rd:
-                col_name = str(d_num)
-                if d_num in md:
-                    missed_cells[(row_idx, col_name)] = True
-                else:
-                    honored_cells[(row_idx, col_name)] = rs.get(d_num, 'user')
-
-        def color_shifts_with_source(row):
-            """行単位のスタイラー: シフト色 + 希望由来の枠線"""
-            row_idx = row.name  # DataFrame index
-            styles = []
-            for col in row.index:
-                val = row[col]
-                base = "text-align: center; "
-                if val in shift_colors:
-                    bg = shift_colors[val]
-                    fg = shift_text_colors.get(val, "#000000")
-                    base += f"background-color: {bg}; color: {fg}; font-weight: {'bold' if val == N else 'normal'}; "
-                # 希望由来マーキング
-                key = (row_idx, col)
-                if key in honored_cells:
-                    src = honored_cells[key]
-                    if src == 'admin':
-                        base += "border: 3px solid #3B82F6; "   # 青枠 = 管理者上書き
-                    else:
-                        base += "border: 3px solid #F43F5E; "   # 赤枠 = スタッフ希望
-                elif key in missed_cells:
-                    base += "border: 3px dashed #F97316; "      # オレンジ破線 = 未達希望
-                styles.append(base)
-            return styles
+        def color_shifts_with_markers(val):
+            """セル値からマーカーを判定してスタイルを返す"""
+            if not isinstance(val, str):
+                return "text-align: center"
+            # マーカー付きセルの処理
+            raw = val
+            if raw.startswith("●"):
+                shift_val = raw[1:]
+                bg = shift_colors.get(shift_val, "#FFFFFF")
+                fg = shift_text_colors.get(shift_val, "#000000")
+                # スタッフ希望反映: 赤背景グラデーション
+                return f"background: linear-gradient(135deg, #FEE2E2 3px, {bg} 3px); color: {fg}; text-align: center; font-weight: bold"
+            elif raw.startswith("◆"):
+                shift_val = raw[1:]
+                bg = shift_colors.get(shift_val, "#FFFFFF")
+                fg = shift_text_colors.get(shift_val, "#000000")
+                # 管理者上書き反映: 青背景グラデーション
+                return f"background: linear-gradient(135deg, #BFDBFE 3px, {bg} 3px); color: {fg}; text-align: center; font-weight: bold"
+            elif raw.startswith("△"):
+                shift_val = raw[1:]
+                bg = shift_colors.get(shift_val, "#FFFFFF")
+                fg = shift_text_colors.get(shift_val, "#000000")
+                # 未達希望: オレンジ背景グラデーション
+                return f"background: linear-gradient(135deg, #FED7AA 3px, {bg} 3px); color: {fg}; text-align: center; font-weight: bold"
+            elif raw in shift_colors:
+                bg = shift_colors[raw]
+                fg = shift_text_colors.get(raw, "#000000")
+                return f"background-color: {bg}; color: {fg}; text-align: center; font-weight: {'bold' if raw == N else 'normal'}"
+            return "text-align: center"
 
         # ── シフト表示モード切替 ─────────────────────────────
         view_mode = st.radio("表示モード", ["👁 確認", "✏️ 手動編集"],
                              horizontal=True, key=f"view_mode_{pat_idx}")
 
         if view_mode == "👁 確認":
-            styled = df.style.apply(color_shifts_with_source, axis=1, subset=day_cols)
-            st.caption("🔴 赤枠=スタッフ希望反映　🔵 青枠=管理者上書き反映　🟠 破線=未達希望")
+            styled = df.style.map(color_shifts_with_markers, subset=day_cols)
+            st.caption("●赤丸=スタッフ希望OK　◆青菱=管理者上書きOK　△三角=希望NG（未達）")
             st.dataframe(styled, use_container_width=True, height=600, hide_index=True)
         else:
             st.caption("⚠ セルを直接編集できます。変更後「変更を保存」を押してください。")

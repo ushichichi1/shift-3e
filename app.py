@@ -1869,12 +1869,34 @@ with tab3:
     st.markdown("---")
 
     def _safe_bool(v):
-        if v is None or (isinstance(v, float) and pd.isna(v)):
-            return False
+        try:
+            if v is None or pd.isna(v):
+                return False
+        except (TypeError, ValueError):
+            pass
         try:
             return bool(v)
         except (TypeError, ValueError):
             return False
+
+    def _safe_str(v, default=""):
+        try:
+            if v is None or pd.isna(v):
+                return default
+        except (TypeError, ValueError):
+            pass
+        return str(v).strip()
+
+    def _safe_int(v, default=0):
+        try:
+            if v is None or pd.isna(v):
+                return default
+        except (TypeError, ValueError):
+            pass
+        try:
+            return int(float(v))
+        except (TypeError, ValueError):
+            return default
 
     if st.button("🚀 勤務表を生成", type="primary", use_container_width=True):
         staff_list = []
@@ -1908,14 +1930,14 @@ with tab3:
                     work_days = None
             no_hol = _safe_bool(row.get("祝日不可"))
             no_we = _safe_bool(row.get("土日不可"))
-            late_mode_raw = str(row.get("遅出モード") or "").strip()
+            late_mode_raw = _safe_str(row.get("遅出モード"))
             late_mode = 'specified_only' if late_mode_raw in ('指定日のみ', 'specified_only') else 'always'
             is_night_only = _safe_bool(row.get("夜勤専従"))
             is_day_newbie = _safe_bool(row.get("日勤新人"))
             is_night_newbie = _safe_bool(row.get("夜勤新人"))
-            triple_rem = int(float(row["+1人夜勤残"])) if pd.notna(row.get("+1人夜勤残")) else 0
+            triple_rem = _safe_int(row.get("+1人夜勤残"))
             can_mentor = _safe_bool(row.get("新人フォロー可"))
-            monthly_leave = int(float(row["当月年休予定"])) if pd.notna(row.get("当月年休予定")) else 0
+            monthly_leave = _safe_int(row.get("当月年休予定"))
             staff_list.append(Staff(
                 name, cls, is_leader=is_ldr, is_er_leader=is_erl,
                 can_late=can_late, late_mode=late_mode,

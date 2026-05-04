@@ -1551,8 +1551,9 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
             print(alert)
         print(f"  → Infeasibleの原因になる可能性があります。\n")
 
-    # 勤務希望（ソフト制約）+ 夜不（ハード制約）
+    # 勤務希望（ハード/ソフト制約）+ 夜不（ハード制約）
     req_miss = {}
+    hard_off_count = 0
     for s, s_reqs in requests.items():
         if s not in names:
             continue
@@ -1568,6 +1569,10 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
                 elif shift_type == "明休":
                     # 明または休: ハード制約（明 or 休のどちらか）
                     prob += x[s, d_idx, A] + x[s, d_idx, O] >= 1
+                elif shift_type == O:
+                    # 休み希望: ハード制約（必ず公休にする）
+                    prob += x[s, d_idx, O] == 1
+                    hard_off_count += 1
                 elif shift_type == "遅希":
                     # 遅出希望: ソフト制約（can_late フラグが必要）
                     if can_late.get(s):
@@ -1584,6 +1589,8 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
                     key = (s, d_idx)
                     req_miss[key] = pulp.LpVariable(f"rmiss_{s}_{d_idx}", cat=pulp.LpBinary)
                     prob += x[s, d_idx, shift_type] + req_miss[key] >= 1
+    if hard_off_count:
+        print(f"  休み希望: {hard_off_count}件（ハード制約）")
 
     # --- ソフト制約 ---
     # 3E: 夜勤リーダー欠如ペナルティ（leader_pool からリーダー夜勤が入るか）

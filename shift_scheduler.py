@@ -1551,9 +1551,9 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
             print(alert)
         print(f"  → Infeasibleの原因になる可能性があります。\n")
 
-    # 勤務希望（ハード/ソフト制約）+ 夜不（ハード制約）
-    req_miss = {}
-    hard_off_count = 0
+    # 勤務希望: 全てハード制約（解なし時はInfeasibleで通知）
+    req_miss = {}  # ソフト制約用（現在は遅出希望のみ使用）
+    hard_req_log = {}  # {種別: 件数} ログ用
     for s, s_reqs in requests.items():
         if s not in names:
             continue
@@ -1563,34 +1563,46 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
                 if shift_type == "夜不":
                     # 夜勤不可: ハード制約
                     prob += x[s, d_idx, N] == 0
+                    hard_req_log["夜不"] = hard_req_log.get("夜不", 0) + 1
                 elif shift_type == "休暇":
                     # 休暇: 強制的に暇シフト
                     prob += x[s, d_idx, V] == 1
+                    hard_req_log["休暇"] = hard_req_log.get("休暇", 0) + 1
                 elif shift_type == "明休":
                     # 明または休: ハード制約（明 or 休のどちらか）
                     prob += x[s, d_idx, A] + x[s, d_idx, O] >= 1
+                    hard_req_log["明休"] = hard_req_log.get("明休", 0) + 1
                 elif shift_type == O:
                     # 休み希望: ハード制約（必ず公休にする）
                     prob += x[s, d_idx, O] == 1
-                    hard_off_count += 1
+                    hard_req_log["休"] = hard_req_log.get("休", 0) + 1
                 elif shift_type == "遅希":
-                    # 遅出希望: ソフト制約（can_late フラグが必要）
+                    # 遅出希望: ハード制約（can_late=True のスタッフのみ）
                     if can_late.get(s):
-                        key = (s, d_idx)
-                        req_miss[key] = pulp.LpVariable(f"rmiss_{s}_{d_idx}", cat=pulp.LpBinary)
-                        prob += x[s, d_idx, L] + req_miss[key] >= 1
+                        prob += x[s, d_idx, L] == 1
+                        hard_req_log["遅希"] = hard_req_log.get("遅希", 0) + 1
                     # can_late=False のスタッフは遅出不可のため無視
                 elif shift_type == R:
-                    # 研修: ハード制約（勤務日数に含むが日勤人数にはカウントしない）
+                    # 研修: ハード制約
                     prob += x[s, d_idx, R] == 1
+                    hard_req_log["研修"] = hard_req_log.get("研修", 0) + 1
                 elif shift_type == I:
                     pass  # 3Eでは委員会なし、無視
+                elif shift_type == D:
+                    # 日勤希望: ハード制約（日勤系のいずれか = D or L）
+                    prob += x[s, d_idx, D] + x[s, d_idx, L] >= 1
+                    hard_req_log["日勤"] = hard_req_log.get("日勤", 0) + 1
+                elif shift_type == N:
+                    # 夜勤希望: ハード制約
+                    prob += x[s, d_idx, N] == 1
+                    hard_req_log["夜勤"] = hard_req_log.get("夜勤", 0) + 1
                 else:
-                    key = (s, d_idx)
-                    req_miss[key] = pulp.LpVariable(f"rmiss_{s}_{d_idx}", cat=pulp.LpBinary)
-                    prob += x[s, d_idx, shift_type] + req_miss[key] >= 1
-    if hard_off_count:
-        print(f"  休み希望: {hard_off_count}件（ハード制約）")
+                    # その他: ハード制約
+                    prob += x[s, d_idx, shift_type] == 1
+                    hard_req_log["他"] = hard_req_log.get("他", 0) + 1
+    if hard_req_log:
+        parts = [f"{k}:{v}件" for k, v in hard_req_log.items()]
+        print(f"  勤務希望（全ハード制約）: {', '.join(parts)}  合計{sum(hard_req_log.values())}件")
 
     # --- ソフト制約 ---
     # 3E: 夜勤リーダー欠如ペナルティ（leader_pool からリーダー夜勤が入るか）

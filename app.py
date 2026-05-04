@@ -331,6 +331,7 @@ def _staff_to_df(staff_list):
             "リーダー可": bool(s.is_leader),
             "ERリーダー可": bool(s.is_er_leader),
             "遅出可": bool(s.can_late),
+            "遅出モード": "指定日のみ" if getattr(s, 'late_mode', 'always') == 'specified_only' else "",
             "週勤務": s.weekly_days,
             "前月末": s.prev_month or "",
             "夜勤Min": s.night_min,
@@ -339,6 +340,12 @@ def _staff_to_df(staff_list):
             "勤務曜日": wd_str,
             "祝日不可": s.no_holiday,
             "土日不可": s.no_weekend,
+            "夜勤専従": bool(getattr(s, 'is_night_only', False)),
+            "日勤新人": bool(getattr(s, 'is_day_newbie', False)),
+            "夜勤新人": bool(getattr(s, 'is_night_newbie', False)),
+            "+1人夜勤残": getattr(s, 'triple_remaining', 0),
+            "新人フォロー可": bool(getattr(s, 'can_mentor_newbie', False)),
+            "当月年休予定": getattr(s, 'monthly_leave_days', 0),
         })
     return pd.DataFrame(rows) if rows else _default_staff()
 
@@ -403,9 +410,13 @@ def _render_load_preview(staff_df, requests_df=None):
 
     no_night = []
     late_staff = []
+    late_specified = []
     pt_list = []
     prev_month = []
     day_restrict = []
+    night_only_staff = []
+    day_newbie_staff = []
+    night_newbie_staff = []
     errors = []
     warnings = []
 
@@ -421,11 +432,22 @@ def _render_load_preview(staff_df, requests_df=None):
         if _is_zero(nmax):
             no_night.append(name)
         if _is_true(row.get("遅出可")):
-            late_staff.append(name)
+            lm = str(row.get("遅出モード", "")).strip()
+            if lm in ("指定日のみ", "specified_only"):
+                late_specified.append(name)
+            else:
+                late_staff.append(name)
         if wk_n is not None and wk_n > 0:
             pt_list.append(f"{name}(週{wk_n})")
         if pm in ("夜", "明"):
             prev_month.append(f"{name}({pm})")
+        if _is_true(row.get("夜勤専従")):
+            night_only_staff.append(name)
+        if _is_true(row.get("日勤新人")):
+            day_newbie_staff.append(name)
+        if _is_true(row.get("夜勤新人")):
+            tr = _num_or_none(row.get("+1人夜勤残"))
+            night_newbie_staff.append(f"{name}(残{tr})" if tr else name)
         parts = []
         wd = str(row.get("勤務曜日") or "").strip()
         if wd:
@@ -458,15 +480,22 @@ def _render_load_preview(staff_df, requests_df=None):
         with cols[0]:
             if no_night:
                 st.markdown(f"**🚫 夜勤しない人（Max=0）** [{len(no_night)}人]  \n{_safe_join(no_night)}")
-            if late_staff:
-                st.markdown(f"**🌅 遅出可能** [{len(late_staff)}人]  \n{_safe_join(late_staff)}")
+            all_late = late_staff + [f"{n}(指定日のみ)" for n in late_specified]
+            if all_late:
+                st.markdown(f"**🌅 遅出可能** [{len(all_late)}人]  \n{_safe_join(all_late)}")
             if pt_list:
                 st.markdown(f"**⏰ パートタイム** [{len(pt_list)}人]  \n{_safe_join(pt_list)}")
+            if night_only_staff:
+                st.markdown(f"**🌙 夜勤専従** [{len(night_only_staff)}人]  \n{_safe_join(night_only_staff)}")
         with cols[1]:
             if prev_month:
                 st.markdown(f"**🎯 前月繰越** [{len(prev_month)}人]  \n{_safe_join(prev_month)}")
             if day_restrict:
                 st.markdown(f"**📆 勤務制限** [{len(day_restrict)}人]  \n{_safe_join(day_restrict)}")
+            if day_newbie_staff:
+                st.markdown(f"**🔰 日勤新人** [{len(day_newbie_staff)}人]  \n{_safe_join(day_newbie_staff)}")
+            if night_newbie_staff:
+                st.markdown(f"**🌟 夜勤新人(+1人)** [{len(night_newbie_staff)}人]  \n{_safe_join(night_newbie_staff)}")
 
         if errors:
             st.error("❌ **入力エラー**（このままでは動作不正）")
@@ -488,6 +517,8 @@ _SETTINGS_WIDGET_MAP = {
     "max_night": "inp_max_n_reg", "pref_night": "inp_pref_n_reg",
     "max_consecutive": "inp_max_consec", "pref_consecutive": "inp_pref_consec",
     "solver_time_limit": "inp_time_limit",
+    "min_day_wd": "inp_min_day_wd", "max_day_wd": "inp_max_day_wd",
+    "min_day_hd": "inp_min_day_hd", "max_day_hd": "inp_max_day_hd",
 }
 
 def _apply_settings(gs_settings):
@@ -511,6 +542,7 @@ def _default_staff():
         "リーダー可":   [True, True,  False, False, False],
         "ERリーダー可": [True, False, False, False, False],
         "遅出可":       [True, False, True,  False, False],
+        "遅出モード":   ["", "", "", "", ""],
         "週勤務": [None, None, None, None, None],
         "前月末": ["", "", "", "", ""],
         "夜勤Min": [None, None, None, None, None],
@@ -519,6 +551,12 @@ def _default_staff():
         "勤務曜日": ["", "", "", "", ""],
         "祝日不可": [False, False, False, False, False],
         "土日不可": [False, False, False, False, False],
+        "夜勤専従": [False, False, False, False, False],
+        "日勤新人": [False, False, False, False, False],
+        "夜勤新人": [False, False, False, False, False],
+        "+1人夜勤残": [0, 0, 0, 0, 0],
+        "新人フォロー可": [False, False, False, False, False],
+        "当月年休予定": [0, 0, 0, 0, 0],
     })
 
 
@@ -1302,7 +1340,7 @@ st.sidebar.markdown(
     unsafe_allow_html=True,
 )
 col4a, col4b, col4c, col4d = st.sidebar.columns(4)
-min_day_wd  = col4a.number_input("平日↓", 5, 30, 11, key="inp_min_day_wd",
+min_day_wd  = col4a.number_input("平日↓", 5, 30, 10, key="inp_min_day_wd",
                                    help="平日の日勤系合計の下限（病棟+HCU+ER+共L+遅出）")
 max_day_wd  = col4b.number_input("平日↑", 5, 30, 15, key="inp_max_day_wd",
                                    help="平日の日勤系合計の上限（偏り防止）")
@@ -1316,7 +1354,7 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("夜勤設定")
 col3, col4 = st.sidebar.columns(2)
 max_n_reg  = col3.number_input("夜勤 上限/月", 1, 15, 5, key="inp_max_n_reg")
-pref_n_reg = col4.number_input("夜勤 推奨/月", 1, 15, 4, key="inp_pref_n_reg")
+pref_n_reg = col4.number_input("夜勤 推奨/月", 1, 15, 3, key="inp_pref_n_reg")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("連勤設定")
@@ -1581,9 +1619,10 @@ with tab1:
     )
 
     # --- スタッフ情報カラム選択（表示/非表示） ---
-    _all_staff_detail_cols = ["クラス", "リーダー可", "ERリーダー可", "遅出可",
+    _all_staff_detail_cols = ["クラス", "リーダー可", "ERリーダー可", "遅出可", "遅出モード",
                               "週勤務", "前月末",
-                              "夜勤Min", "夜勤Max", "連勤Max", "勤務曜日", "祝日不可", "土日不可"]
+                              "夜勤Min", "夜勤Max", "連勤Max", "勤務曜日", "祝日不可", "土日不可",
+                              "夜勤専従", "日勤新人", "夜勤新人", "+1人夜勤残", "新人フォロー可", "当月年休予定"]
     if view_mode in ("👤 スタッフ情報", "👤+📝 すべて"):
         with st.expander("⚙ 表示カラム選択", expanded=False):
             _visible_staff_cols = st.multiselect(
@@ -1617,10 +1656,13 @@ with tab1:
 - **勤務曜日**: パート等で特定曜日のみ勤務する場合（例: 月水金）
 - **祝日不可**: ONにすると祝日に勤務を入れません
 - **土日不可**: ONにすると土日に勤務を入れません
-- **夜勤研修**: ONにすると通常夜勤2人に加え3人目（研修枠）として夜勤配置。研修者同士は同日に入りません
-- **研修夜勤回数**: 月間の研修夜勤上限回数（空欄=制限なし）
-- **新人**: ONで新人扱い。日勤配置基準の頭数にはカウントされますが、リーダー判定・独立C判定（B+Cペア制約）からは除外されます。夜勤を禁止したい場合は「夜勤Max=0」を併設
-- **新人卒業日**: その日まで新人扱い、翌日から通常運用（空欄=月末まで新人）。月中から独り立ちさせる場合に使用
+- **夜勤専従**: ONにすると夜勤・明け・休のみの勤務パターンになります
+- **日勤新人**: ONで新人扱い。日勤配置基準の最低人数カウントから除外されます
+- **夜勤新人**: ONにすると通常4名に加え+1人（5人目）として夜勤配置。同日に夜勤新人は最大1名
+- **+1人夜勤残**: 月内の+1人夜勤回数上限（0=対象外）
+- **新人フォロー可**: ONで夜勤新人の指導役として配置可能
+- **当月年休予定**: 当月の有給休暇予定日数
+- **遅出モード**: 空欄=常時遅出可、指定日のみ=遅出希望がある日だけ遅出配置
 """)
 
     if view_mode in ("📝 勤務希望", "👤+📝 すべて"):
@@ -1680,9 +1722,10 @@ with tab1:
             st.session_state.requests_df = pd.DataFrame(rows)
 
     # --- 統合DataFrame構築 ---
-    _staff_cols = ["クラス", "リーダー可", "ERリーダー可", "遅出可",
+    _staff_cols = ["クラス", "リーダー可", "ERリーダー可", "遅出可", "遅出モード",
                    "週勤務", "前月末",
-                   "夜勤Min", "夜勤Max", "連勤Max", "勤務曜日", "祝日不可", "土日不可"]
+                   "夜勤Min", "夜勤Max", "連勤Max", "勤務曜日", "祝日不可", "土日不可",
+                   "夜勤専従", "日勤新人", "夜勤新人", "+1人夜勤残", "新人フォロー可", "当月年休予定"]
     _day_cols = [str(d) for d in range(1, num_days + 1)]
 
     # staff_df と requests_df を名前で結合
@@ -1713,6 +1756,7 @@ with tab1:
         "リーダー可":   st.column_config.CheckboxColumn("リーダー可", width="small", help="病棟/HCU/共リーダー枠に入れる"),
         "ERリーダー可": st.column_config.CheckboxColumn("ERリーダー可", width="small", help="平日ER必須枠（クラス=ER可必須）"),
         "遅出可": st.column_config.CheckboxColumn("遅出可", width="small"),
+        "遅出モード": st.column_config.SelectboxColumn("遅出モード", options=["", "指定日のみ"], width="small", help="空欄=常時可、指定日のみ=遅希がある日だけ遅出配置"),
         "週勤務": st.column_config.NumberColumn("週勤務", min_value=1, max_value=7, step=1, width="small"),
         "前月末": st.column_config.SelectboxColumn("前月末", options=["", "夜", "明"], width="small"),
         "夜勤Min": st.column_config.NumberColumn("夜勤Min", min_value=0, max_value=15, step=1, width="small"),
@@ -1721,6 +1765,12 @@ with tab1:
         "勤務曜日": st.column_config.TextColumn("勤務曜日", width="small", help="例: 月火木"),
         "祝日不可": st.column_config.CheckboxColumn("祝日不可", width="small"),
         "土日不可": st.column_config.CheckboxColumn("土日不可", width="small"),
+        "夜勤専従": st.column_config.CheckboxColumn("夜勤専従", width="small", help="ON=夜勤・明け・休のみ"),
+        "日勤新人": st.column_config.CheckboxColumn("日勤新人", width="small", help="ON=日勤最低人数カウント外"),
+        "夜勤新人": st.column_config.CheckboxColumn("夜勤新人", width="small", help="ON=通常4名に加え+1人目として夜勤配置"),
+        "+1人夜勤残": st.column_config.NumberColumn("+1人夜勤残", min_value=0, max_value=15, step=1, width="small", help="月内の+1人夜勤回数上限（0=対象外）"),
+        "新人フォロー可": st.column_config.CheckboxColumn("新人フォロー可", width="small", help="ON=夜勤新人の指導役として配置可"),
+        "当月年休予定": st.column_config.NumberColumn("当月年休予定", min_value=0, max_value=15, step=1, width="small"),
     }
     col_config = {}
     # 勤務希望モードでは名前・クラスを読み取り専用に
@@ -1850,11 +1900,23 @@ with tab3:
                     work_days = None
             no_hol = bool(row.get("祝日不可", False))
             no_we = bool(row.get("土日不可", False))
+            late_mode_raw = str(row.get("遅出モード", "")).strip()
+            late_mode = 'specified_only' if late_mode_raw in ('指定日のみ', 'specified_only') else 'always'
+            is_night_only = bool(row.get("夜勤専従", False))
+            is_day_newbie = bool(row.get("日勤新人", False))
+            is_night_newbie = bool(row.get("夜勤新人", False))
+            triple_rem = int(row["+1人夜勤残"]) if pd.notna(row.get("+1人夜勤残")) else 0
+            can_mentor = bool(row.get("新人フォロー可", False))
+            monthly_leave = int(row["当月年休予定"]) if pd.notna(row.get("当月年休予定")) else 0
             staff_list.append(Staff(
                 name, cls, is_leader=is_ldr, is_er_leader=is_erl,
-                can_late=can_late, weekly_days=weekly, prev_month=prev,
+                can_late=can_late, late_mode=late_mode,
+                weekly_days=weekly, prev_month=prev,
                 night_min=n_min, night_max=n_max, consec_max=c_max,
-                work_days=work_days, no_holiday=no_hol, no_weekend=no_we))
+                work_days=work_days, no_holiday=no_hol, no_weekend=no_we,
+                is_night_only=is_night_only, is_day_newbie=is_day_newbie,
+                is_night_newbie=is_night_newbie, triple_remaining=triple_rem,
+                can_mentor_newbie=can_mentor, monthly_leave_days=monthly_leave))
 
         if not staff_list:
             st.error("スタッフが0人です")

@@ -194,7 +194,7 @@ SETTINGS_KEYS = [
 # ============================================================
 class Staff:
     def __init__(self, name, cls, is_leader=False, is_er_leader=False,
-                 can_late=False, weekly_days=None, prev_month="",
+                 can_late=False, late_mode='always', weekly_days=None, prev_month="",
                  night_min=None, night_max=None, consec_max=None,
                  work_days=None, no_holiday=False, no_weekend=False,
                  # 3E でも使う属性 (xlsx 14〜18列、19列)
@@ -207,6 +207,7 @@ class Staff:
         self.is_leader = is_leader or is_er_leader    # リーダー枠可
         self.is_er_leader = is_er_leader              # ERリーダー必須枠可
         self.can_late = can_late        # True=遅出勤務可能
+        self.late_mode = late_mode      # 'always' or 'specified_only'
         self.weekly_days = weekly_days  # None=フルタイム, int=週N日
         self.prev_month = prev_month    # ""=通常, "夜"=前月末夜勤, "明"=前月末明け
         self.night_min = night_min      # None=設定値を使用, int=個別指定
@@ -218,8 +219,8 @@ class Staff:
         # 3E でも使う属性 (Phase 1 で xlsx 拡張に伴い追加)
         self.is_night_only = is_night_only          # True=夜勤専従 (日勤=0)
         self.is_day_newbie = is_day_newbie          # True=日勤新人 (最低人数カウント外)
-        self.is_night_newbie = is_night_newbie      # True=夜勤新人 (3人夜勤対象)
-        self.triple_remaining = triple_remaining    # 3人夜勤の月内残回数 (0=対象外)
+        self.is_night_newbie = is_night_newbie      # True=夜勤新人 (+1人夜勤対象)
+        self.triple_remaining = triple_remaining    # +1人夜勤の月内残回数 (0=対象外)
         self.can_mentor_newbie = can_mentor_newbie  # True=新人指導可 (夜勤ペア判定)
         self.monthly_leave_days = monthly_leave_days  # 当月の年休予定日数 (ソフト目標)
         # ICU互換フィールド（後方互換のため維持。3E内で is_night_only と同義）
@@ -388,10 +389,11 @@ def _parse_staff_list(rows):
       13: 夜勤専従 (◯/空)              ★ Phase 1 追加
       14: 日勤新人 (◯/空)              ★ Phase 1 追加
       15: 夜勤新人 (◯/空)              ★ Phase 1 追加
-      16: 3人夜勤残 (整数、0=対象外)   ★ Phase 1 追加
+      16: +1人夜勤残 (整数、0=対象外)   ★ Phase 1 追加
       17: 新人フォロー可 (◯/空)        ★ Phase 1 追加
       18: 当月年休予定 (整数日数)      ★ Phase 1 追加
-    旧フォーマット (13列) は 14〜19 列が空欄で読み込まれ、
+      19: 遅出モード (指定日のみ/空)   ★ Phase 2 追加
+    旧フォーマット (13列) は 14〜 列が空欄で読み込まれ、
     後方互換で動作する。
     """
     staff = []
@@ -438,8 +440,12 @@ def _parse_staff_list(rows):
         triple_remaining = (_to_int(row[16]) or 0) if len(row) > 16 else 0
         mentor_newbie    = _is_truthy(row[17]) if len(row) > 17 else False
         monthly_leave    = (_to_int(row[18]) or 0) if len(row) > 18 else 0
+        # Phase 2 追加列 (19)
+        late_mode_raw    = str(row[19]).strip() if len(row) > 19 else ""
+        late_mode        = 'specified_only' if late_mode_raw in ('指定日のみ', 'specified_only') else 'always'
         staff.append(Staff(name, cls, is_leader=is_ldr, is_er_leader=is_erl,
-                           can_late=can_late, weekly_days=weekly, prev_month=prev,
+                           can_late=can_late, late_mode=late_mode,
+                           weekly_days=weekly, prev_month=prev,
                            night_min=n_min, night_max=n_max, consec_max=c_max,
                            work_days=work_days, no_holiday=no_hol, no_weekend=no_we,
                            is_night_only=night_only, is_day_newbie=day_newbie,
@@ -903,6 +909,7 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
     night_min = {s.name: s.night_min for s in staff_list}
     night_max = {s.name: s.night_max for s in staff_list}
     can_late  = {s.name: s.can_late for s in staff_list}
+    late_mode = {s.name: s.late_mode for s in staff_list}
     is_leader_map    = {s.name: s.is_leader for s in staff_list}
     is_er_leader_map = {s.name: s.is_er_leader for s in staff_list}
     # Phase 1: 3E でも 夜勤専従・新人系 を反映
@@ -1167,6 +1174,25 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
                 if (d + 1) not in day_reqs:
                     prob += x[s, d, D] == 0
     # 時短スタッフ: D/N/SN/LDは変数削減で除外済み。早出・遅出は許可。
+
+    # ================================================================
+    # 3E: 遅出 specified_only 制約
+    # ================================================================
+    # late_mode='specified_only' のスタッフ: 遅希 or admin assign_S がある日のみ L 可
+    _late_specified_days = {}  # {staff_name: set of day_indices(0-based)}
+    for s_name in late_pool:
+        if late_mode.get(s_name) == 'specified_only':
+            allowed = set()
+            s_reqs = requests.get(s_name, {})
+            for day_num, shift_type in s_reqs.items():
+                if shift_type in ("遅希", "遅出希望", L):
+                    allowed.add(day_num - 1)  # 1-indexed → 0-indexed
+            _late_specified_days[s_name] = allowed
+    # 指定日以外は L を禁止
+    for s_name, allowed_days in _late_specified_days.items():
+        for d in days:
+            if d not in allowed_days:
+                prob += x[s_name, d, L] == 0
 
     # ================================================================
     # 3E: 遅出制約

@@ -1123,7 +1123,7 @@ def _parse_uploaded_excel(uploaded_file, year, month):
     staff_list = []
     reqs = {}
     reqs_source = {}  # {staff_name: {day: 'admin'|'user'}} — exceljs の色から判定
-    n_staff_cols = 13  # 名前〜土日不可（3E: 13列）
+    n_staff_cols = 20  # 名前〜遅出モード（3E: 20列）
 
     # shift-cf の excel-export.ts が書く ARGB 値
     _ADMIN_FILL = 'FFDCE6F1'  # 青系 (管理者上書き)
@@ -1182,7 +1182,7 @@ def _parse_uploaded_excel(uploaded_file, year, month):
         if "勤務希望" in wb.sheetnames:
             ws_rq = wb["勤務希望"]
             req_rows = []
-            day_start = 3  # 勤務希望シートは 列C(3) から日付
+            day_start = 2  # 勤務希望シートは 列B(2) から日付（列A=名前）
             for r in range(4, ws_rq.max_row + 1):  # row 4 からデータ
                 # 名前列は数式（=スタッフ情報!A4）→ data_only=Trueで未計算だとNone
                 # → スタッフ情報シートから取得済みの名前を行番号で対応させる

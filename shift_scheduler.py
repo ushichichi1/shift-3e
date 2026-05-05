@@ -864,7 +864,7 @@ def _write_gsheet_one(sh, result):
 
 def build_and_solve(staff_list, requests, settings, num_patterns=1,
                     night_hours=16, night_72h_mode="none", op_rules=None,
-                    enabled_shifts=None):
+                    enabled_shifts=None, randomize=True):
     """勤務表を num_patterns パターン生成して返す (list of result dict)"""
     year     = settings.get("year") or 2026
     month    = settings.get("month") or 5
@@ -1732,12 +1732,17 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
           f"hd_over:{len(_hd_over_list)} wd_over:{len(_wd_over_list)} "
           f"erl:{len(_erl_short_list)} lead:{len(_lead_short_list)} late:{len(_late_short_list)}")
 
-    # 毎回異なる解を生成するための微小乱数ノイズ
-    import random
-    _noise = pulp.lpSum(
-        random.uniform(-0.01, 0.01) * x[s, d, t]
-        for s in names for d in days for t in SHIFTS
-    )
+    # 毎回異なる解を生成するための微小乱数ノイズ（設定で切替可能）
+    if randomize:
+        import random
+        _noise = pulp.lpSum(
+            random.uniform(-0.01, 0.01) * x[s, d, t]
+            for s in names for d in days for t in SHIFTS
+        )
+        print(f"  乱数モード: ON（毎回異なる解）")
+    else:
+        _noise = 0
+        print(f"  乱数モード: OFF（同じ入力→同じ解）")
 
     obj = (
         300 * pulp.lpSum(a_miss[d] for d in days)

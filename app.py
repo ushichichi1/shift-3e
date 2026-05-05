@@ -1364,6 +1364,7 @@ pref_consec = col6.number_input("推奨連勤", 1, 10, 4, key="inp_pref_consec")
 
 time_limit   = st.sidebar.number_input("計算時間上限（秒）", 10, 600, 120, key="inp_time_limit")
 num_patterns = st.sidebar.number_input("生成パターン数", 1, 5, 3, key="inp_num_patterns")
+randomize    = st.sidebar.checkbox("毎回異なる解を生成（乱数あり）", value=True, key="inp_randomize")
 
 night_hours   = 16
 night_72h_mode = "none"
@@ -1983,7 +1984,8 @@ with tab3:
                                               night_hours=night_hours,
                                               night_72h_mode=night_72h_mode,
                                               op_rules=op_rules,
-                                              enabled_shifts=st.session_state.get("enabled_shifts"))
+                                              enabled_shifts=st.session_state.get("enabled_shifts"),
+                                              randomize=randomize)
 
             console_output = console.getvalue()
 

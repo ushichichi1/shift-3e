@@ -1732,6 +1732,13 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
           f"hd_over:{len(_hd_over_list)} wd_over:{len(_wd_over_list)} "
           f"erl:{len(_erl_short_list)} lead:{len(_lead_short_list)} late:{len(_late_short_list)}")
 
+    # 毎回異なる解を生成するための微小乱数ノイズ
+    import random
+    _noise = pulp.lpSum(
+        random.uniform(-0.01, 0.01) * x[s, d, t]
+        for s in names for d in days for t in SHIFTS
+    )
+
     obj = (
         300 * pulp.lpSum(a_miss[d] for d in days)
         + REQ_PENALTY * pulp.lpSum(req_miss[k] for k in req_miss)
@@ -1750,6 +1757,7 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
         +   6 * pulp.lpSum(night_spread[i] for i in night_spread)
         +   3 * pulp.lpSum(cp[i] for i in cp)
         +   8 * (max_off - min_off)
+        + _noise
     )
     if wd_level_gap is not None:
         obj += 40 * wd_level_gap

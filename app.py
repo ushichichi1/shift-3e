@@ -1385,6 +1385,24 @@ enabled_shifts = st.sidebar.multiselect(
 )
 st.session_state.enabled_shifts = enabled_shifts
 
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔗 Cloudflare版と連携")
+st.sidebar.markdown("""
+**Cloudflare版** ではスタッフの希望入力・管理・公開ができます。
+
+**連携の流れ:**
+1. CF版で「📤 Streamlit用Excel出力」
+2. そのExcelをこのアプリで読み込み
+3. 「⚡ 生成」タブでシフト生成
+4. 「📊 結果」タブで「Excel出力」
+5. CF版で「📥 Streamlitシフト取込」
+""")
+st.sidebar.link_button(
+    "🌐 Cloudflare版を開く",
+    "https://shift-cf.t3e-shiftcf.workers.dev/shifts",
+    use_container_width=True,
+)
+
 settings = {
     "year": year, "month": month,
     "public_off_override": po_override,
@@ -1404,6 +1422,14 @@ settings = {
 # メインエリア
 # ============================================================
 st.title("🏥 3E勤務表自動作成ツール（二交代制）")
+
+# CF連携バナー
+st.info(
+    "💡 **Cloudflare版と連携**: "
+    "CF版で希望Excel出力 → このアプリで生成 → 結果ExcelをCF版に取込。"
+    " [Cloudflare版を開く](https://shift-cf.t3e-shiftcf.workers.dev/shifts)",
+    icon="🔗"
+)
 
 tab0, tab1, tab3, tab4, tab5 = st.tabs(
     ["📂 データ入力", "📋 スタッフ・勤務希望", "⚡ 生成", "📊 結果", "🏠 ダッシュボード"])

@@ -1806,11 +1806,16 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
 
         # タイムアウト(Not Solved)でも途中解があれば使う
         if status != pulp.constants.LpStatusOptimal:
-            # 途中解の有無を確認
-            test_val = pulp.value(x[names[0], 0, D])
-            if test_val is None:
+            # 途中解の有無を確認（全スタッフ×全日で実際にシフトが割り当てられているか）
+            valid_solution = True
+            for _s in names[:3]:  # 最初の3人をチェック
+                _shift_sum = sum((pulp.value(x[_s, 0, t]) or 0) for t in SHIFTS)
+                if _shift_sum < 0.5:
+                    valid_solution = False
+                    break
+            if not valid_solution:
                 if pat_idx == 0:
-                    print("✗ 時間内に解が見つかりませんでした。計算時間上限を増やすか、制約を見直してください。")
+                    print("✗ 時間内に実行可能解が見つかりませんでした。計算時間上限を増やすか、制約を見直してください。")
                     return None
                 else:
                     print(f"    パターン{pat_num}以降は生成できませんでした。")
@@ -1830,10 +1835,34 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
                 else:
                     schedule[s].append("?")
 
+        # 希望未達チェック: 実際のスケジュールと照合
         missed_requests = {}
-        for (s, d_idx), var in req_miss.items():
-            if pulp.value(var) > 0.5:
-                missed_requests.setdefault(s, []).append(d_idx + 1)
+        _req_type_to_shift = {
+            D: {D}, N: {N}, "遅希": {L},
+        }
+        for s_name, s_reqs in requests.items():
+            if s_name not in names:
+                continue
+            for day_num, shift_type in s_reqs.items():
+                if not (1 <= day_num <= num_days):
+                    continue
+                d_idx = day_num - 1
+                actual = schedule[s_name][d_idx]
+                missed = False
+                if shift_type == O and actual != O:
+                    missed = True
+                elif shift_type == "休暇" and actual != V:
+                    missed = True
+                elif shift_type == "明休" and actual not in (A, O):
+                    missed = True
+                elif shift_type == D and actual != D:
+                    missed = True
+                elif shift_type == N and actual != N:
+                    missed = True
+                elif shift_type == "遅希" and actual != L:
+                    missed = True
+                if missed:
+                    missed_requests.setdefault(s_name, []).append(day_num)
 
         # 希望未達の警告表示（要スタッフ調整）
         if missed_requests:
@@ -1854,36 +1883,85 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
                       days, holidays, weekends, public_off, min_day, min_day_excl,
                       a_miss, missed_requests, day_short, day_short_excl, year, month)
 
-        # ─── 違反診断サマリ ───
-        def _vio(d_map, label):
-            items = []
-            for dd, var in d_map.items():
-                v = pulp.value(var) or 0
-                if v > 0.5:
-                    items.append((dd + 1, int(round(v))))
-            if items:
-                days_str = ", ".join(f"{dn}日(-{vv})" if "不足" in label or "割れ" in label
-                                      else f"{dn}日(+{vv})" for dn, vv in items)
-                print(f"  ⚠ {label}: {len(items)}日 [{days_str}]")
-                return True
-            return False
-
+        # ─── 違反診断サマリ（実データから計算）───
         any_vio = False
         print("\n  --- 制約違反サマリ ---")
-        any_vio |= _vio(wd_total_short, "平日 日勤系合計 下限割れ")
-        any_vio |= _vio(wd_total_over,  "平日 日勤系合計 上限超過")
-        any_vio |= _vio(hd_total_short, "休日 日勤系合計 下限割れ")
-        any_vio |= _vio(hd_total_over,  "休日 日勤系合計 上限超過")
-        any_vio |= _vio(erl_short,      "平日 ERリーダー必須(>=1) 不足")
-        any_vio |= _vio(lead_short_v,   "共リーダー配置 不足")
-        any_vio |= _vio(late_short_v,   "遅出配置 不足")
+
+        # 日ごとの日勤系合計を実データから計算
+        _day_shifts_set = set(DAY_SHIFTS)
+        wd_vio_items = []
+        hd_vio_items = []
+        for d in days:
+            actual = sum(1 for s in names if schedule[s][d] in _day_shifts_set)
+            day_num = d + 1
+            if d in set(wd_days_idx):
+                if actual < min_day_wd:
+                    wd_vio_items.append((day_num, min_day_wd - actual, "下限"))
+                elif actual > max_day_wd:
+                    wd_vio_items.append((day_num, actual - max_day_wd, "上限"))
+            else:
+                if actual < min_day_hd:
+                    hd_vio_items.append((day_num, min_day_hd - actual, "下限"))
+                elif actual > max_day_hd:
+                    hd_vio_items.append((day_num, actual - max_day_hd, "上限"))
+
+        wd_short = [(dn, v) for dn, v, t in wd_vio_items if t == "下限"]
+        wd_over  = [(dn, v) for dn, v, t in wd_vio_items if t == "上限"]
+        hd_short = [(dn, v) for dn, v, t in hd_vio_items if t == "下限"]
+        hd_over  = [(dn, v) for dn, v, t in hd_vio_items if t == "上限"]
+        for label, items, sign in [
+            ("平日 日勤系合計 下限割れ", wd_short, "-"),
+            ("平日 日勤系合計 上限超過", wd_over, "+"),
+            ("休日 日勤系合計 下限割れ", hd_short, "-"),
+            ("休日 日勤系合計 上限超過", hd_over, "+"),
+        ]:
+            if items:
+                days_str = ", ".join(f"{dn}日({sign}{v})" for dn, v in items)
+                print(f"  ⚠ {label}: {len(items)}日 [{days_str}]")
+                any_vio = True
+
+        # ERリーダー配置チェック（実データ）
+        erl_miss_days = []
+        if erl_staff and wd_days_idx:
+            for d in wd_days_idx:
+                erl_count = sum(1 for s in erl_staff
+                                if schedule[s][d] == D
+                                and int(round(pulp.value(ud[s, d, UNIT_ER]) or 0)) > 0)
+                if erl_count == 0:
+                    erl_miss_days.append(d + 1)
+            if erl_miss_days:
+                print(f"  ⚠ 平日 ERリーダー不足: {len(erl_miss_days)}日 [{', '.join(f'{d}日' for d in erl_miss_days)}]")
+                any_vio = True
+
+        # リーダー・遅出配置チェック（実データ）
+        lead_miss = []
+        late_miss = []
+        for d in days:
+            # 共リーダー
+            lead_count_actual = sum(1 for s in names
+                                    if schedule[s][d] == D
+                                    and int(round(pulp.value(ud[s, d, UNIT_LEAD]) or 0)) > 0)
+            if lead_count_actual < leader_count:
+                lead_miss.append(d + 1)
+            # 遅出
+            late_count_actual = sum(1 for s in names if schedule[s][d] == L)
+            if late_count_actual < late_count:
+                late_miss.append(d + 1)
+        if lead_miss:
+            print(f"  ⚠ 共リーダー配置 不足: {len(lead_miss)}日 [{', '.join(f'{d}日' for d in lead_miss)}]")
+            any_vio = True
+        if late_miss:
+            print(f"  ⚠ 遅出配置 不足: {len(late_miss)}日 [{', '.join(f'{d}日' for d in late_miss)}]")
+            any_vio = True
+
         if not any_vio:
             print("  ✓ 必須制約は全て充足")
+
         # 平日日勤系の最大/最小（平準化チェック）
         if wd_days_idx:
             wd_sums = []
             for d in wd_days_idx:
-                v = sum(int(round(pulp.value(x[s, d, t]) or 0)) for s in names for t in DAY_SHIFTS)
+                v = sum(1 for s in names if schedule[s][d] in _day_shifts_set)
                 wd_sums.append((d + 1, v))
             if wd_sums:
                 vals = [v for _, v in wd_sums]

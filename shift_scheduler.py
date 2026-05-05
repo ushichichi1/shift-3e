@@ -1814,12 +1814,10 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
                     valid_solution = False
                     break
             if not valid_solution:
-                if pat_idx == 0:
-                    print("✗ 時間内に実行可能解が見つかりませんでした。計算時間上限を増やすか、制約を見直してください。")
-                    return None
-                else:
-                    print(f"    パターン{pat_num}以降は生成できませんでした。")
-                    break
+                print(f"    ⚠ パターン{pat_num}: 有効な解なし（時間切れ）、スキップして次を試行")
+                # ゼロ解を除外する制約を追加して次のパターンを試す
+                prob += pulp.lpSum(x[s, d, O] for s in names for d in days) >= 1
+                continue
             else:
                 print(f"    ⚠ 最適解ではありませんが、実行可能解を使用します（時間切れ）")
 
@@ -2032,6 +2030,10 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
                     for s in fulltime for d in days
                 )
                 prob += diff_expr >= min_diff, f"differ_p{pat_idx+1}_from_p{p_idx+1}"
+
+    if not all_results:
+        print("✗ 全パターンで有効な解が見つかりませんでした。計算時間上限を増やすか、制約を見直してください。")
+        return None
 
     return all_results
 

@@ -889,7 +889,7 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
     pref_n_ded  = S("pref_night_dedicated", 9)
     max_consec  = S("max_consecutive", 5)
     pref_consec = S("pref_consecutive", 4)
-    time_limit  = S("solver_time_limit", 120)
+    time_limit  = max(S("solver_time_limit", 120), 120)  # 最低120秒
     # 祝日・公休自動取得
     jp_holidays, weekends, auto_public_off = _get_holidays_and_days_off(year, month)
     manual_holidays = _parse_holidays(settings.get("holidays", ""))
@@ -1555,7 +1555,7 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
     #   ハード制約 = 休み・夜不・休暇・明休・研修（絶対守る）
     #   準ハード制約 = 日勤・夜勤・遅出（超高ペナルティ50000、ほぼ絶対だが解なし回避）
     # 運用: 準ハード未達があればスタッフへ変更依頼
-    REQ_PENALTY = 5000  # 他制約(2000)の2.5倍 → ほぼ絶対守る
+    REQ_PENALTY = 2000  # 人数不足ペナルティと同等 → 強く守りつつ解を見つけやすい
     req_miss = {}
     hard_req_log = {}  # {種別: 件数} ログ用
     quasi_hard_log = {}  # 準ハード制約のログ

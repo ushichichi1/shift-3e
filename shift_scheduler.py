@@ -2178,7 +2178,7 @@ def _write_one_sheet(wb, result, sheet_title):
         # 希望達成セル用: 斜線ハッチング風の塗り（背景色を濃くして区別）
         FS_REQ = {
             D: _PF(patternType="lightUp", fgColor="FFCC99", bgColor="FFFFFF"),
-            N: _PF(patternType="lightUp", fgColor="FFFFFF", bgColor="4472C4"),
+            N: _PF(start_color="2E5BA0", end_color="2E5BA0", fill_type="solid"),  # 夜勤希望達成: 濃青ベタ
             A: _PF(patternType="lightUp", fgColor="FFCC99", bgColor="FFF2CC"),
             O: _PF(patternType="lightUp", fgColor="FFCC99", bgColor="E2EFDA"),
             R: _PF(patternType="lightUp", fgColor="FFCC99", bgColor="E8D5F5"),
@@ -2208,11 +2208,7 @@ def _write_one_sheet(wb, result, sheet_title):
                 cell.font = FONT_N if shift == N else FONT
                 cell.border = BDR
             cell.alignment = CTR
-            # 希望セルにコメント（希望内容を表示）
-            if is_req:
-                from openpyxl.comments import Comment
-                req_label = {"夜不": "夜不", "休暇": "休暇"}.get(rd[d+1], rd[d+1])
-                cell.comment = Comment(f"希望: {req_label}", "シフト作成")
+            # 希望セルのマーク（コメントはExcelJS互換性の問題があるため使わない）
 
         counts = {sh: schedule[s].count(sh) for sh in SHIFTS}
         night_total = counts[N] + counts[SN]
